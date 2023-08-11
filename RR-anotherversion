@@ -1,0 +1,71 @@
+import java.net.*;
+import java.util.LinkedList;
+
+public class RoundRobin {
+    private static LinkedList<Socket> servers = new LinkedList<>();
+    
+    public static void main(String[] args) {
+        try {
+            for (int i = 0; i < args.length; i += 2) {
+                servers.add(new Socket(args[i], Integer.parseInt(args[i + 1])));
+            }
+            
+            ServerSocket serverSocket = new ServerSocket(5500);
+            
+            while (true) {
+                Socket conn = serverSocket.accept();
+                Socket selected = selectServer();
+                processRequest(conn, selected);
+            }
+            
+        } catch (IOException e) {
+            System.err.println(e.getMessage());
+        } finally {
+            closeConnections();
+        }
+    }
+    
+    private static synchronized Socket selectServer() {
+        Socket server = servers.poll();
+        servers.add(server);
+        return server;
+    }
+    
+    private static void processRequest(Socket client, Socket server) throws IOException {
+        try {
+            InputStream in = client.getInputStream();
+            OutputStream out = client.getOutputStream();
+            DataInputStream din = new DataInputStream(in);
+            DataOutputStream dout = new DataOutputStream(server.getOutputStream());
+            
+            // Read data from client and send it to server
+            byte[] buffer = new byte[1024];
+            int bytesRead;
+            while ((bytesRead = in.read(buffer)) != -1) {
+                dout.write(buffer, 0, bytesRead);
+                dout.flush();
+            }
+            
+            // Read response from server and send it back to client
+            buffer = new byte[1024];
+            bytesRead = server.getInputStream().read(buffer);
+            if (bytesRead > 0) {
+                out.write(buffer, 0, bytesRead);
+                out.flush();
+            }
+            
+        } finally {
+            client.close();
+        }
+    }
+    
+    private static void closeConnections() {
+        try {
+            for (Socket server : servers) {
+                server.close();
+            }
+        } catch (IOException e) {
+            System.err.println(e.getMessage());
+        }
+    }
+}
